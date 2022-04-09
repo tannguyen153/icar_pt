@@ -28,14 +28,23 @@ if __name__ == '__main__':
     ds = nc.Dataset(fn)
     latitudes = ds.variables['lat'][:]
     longitudes = ds.variables['lon'][:]
-    times = ds.variables['time'][:]
+    times = ds.variables['time'][0:4]
     precips = ds.variables['precip']
     print(np.ma.count(precips))
 
+    times_grid, latitudes_grid, longtitudes_grid = [ 
+        x.flatten() for x in np.meshgrid(times, latitudes, longitudes, indexing='ij')]
+    df0 = pd.DataFrame({
+        'time': times_grid,
+        'latitude': latitudes_grid,
+        'longitude': longtitudes_grid,
+        })
+
     precip_grid= np.zeros(len(times)* len(latitudes) * len(longitudes), dtype=np.double)
     for k in range(len(times)):
+        if k==4: break
         koff= k*len(longitudes)*len(latitudes)
-        print("Plane offset", koff)
+        print("Extract data at time: ", times[k])
         for j in range(len(latitudes)):
             joff= koff+j*len(longitudes)
             for i in range(len(longitudes)):
@@ -43,15 +52,7 @@ if __name__ == '__main__':
                 if np.ma.is_masked(ds.variables['precip'][k,j,i])==False:
                     precip_grid[kji]= ds.variables['precip'][k,j,i]
                 else: precip_grid[kji]= 0
-    df0 = pd.DataFrame({'precip': precip_grid})
-
-    times_grid, latitudes_grid, longtitudes_grid = [ 
-        x.flatten() for x in np.meshgrid(times, latitudes, longitudes, indexing='ij')]
-    df1 = pd.DataFrame({
-        'time': times_grid,
-        'latitude': latitudes_grid,
-        'longitude': longtitudes_grid,
-        })
+    df1 = pd.DataFrame({'precip': precip_grid})
 
     df = pd.concat([df0, df1], join = 'outer', axis=1)        
-    df.to_csv("inputs_time_lat_lon.csv", index=False)
+    df.to_csv("inputs_time_lat_lon_output_precip.csv", index=False)

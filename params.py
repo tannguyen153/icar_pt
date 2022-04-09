@@ -2,13 +2,13 @@ from typing import Optional, List
 
 class TrainerParams():
     gpus: Optional[List[int]] = None
-    epochs: int = 2 
+    epochs: int = 64 
     num_workers: int=8
 
 class ModuleParams():
-    lr: float = 3e-4
+    lr: float = 1e-4
     weight_decay: float = 1e-4
-    batch_size: int = 32
+    batch_size: int = 24
     optim: str = 'adam'
     #used to split the dataset into training and validation sets
     fold: int = 0
