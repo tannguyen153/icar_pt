@@ -28,10 +28,11 @@ class ICARNet(pl.LightningModule):
 
         fn= './data/example.nc'
         ds = nc.Dataset(fn)
+        time_events= 4
 
         latitudes = ds.variables['lat'][:]
         longitudes = ds.variables['lon'][:]
-        times = ds.variables['time'][0:32]
+        times = ds.variables['time'][0:time_events]
         times_grid, latitudes_grid, longtitudes_grid = [
             x.flatten() for x in np.meshgrid(times, latitudes, longitudes, indexing='ij')]
         df0 = pd.DataFrame({
@@ -42,7 +43,7 @@ class ICARNet(pl.LightningModule):
         
         precip_grid= np.zeros(len(times)* len(latitudes) * len(longitudes), dtype=np.double)
         for k in range(len(times)):
-            if k==32: break
+            if k==time_events: break
             koff= k*len(longitudes)*len(latitudes)
             print("Extracting data at time: ", times[k])
             for j in range(len(latitudes)):

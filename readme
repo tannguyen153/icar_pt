@@ -1,0 +1,6 @@
+salloc -C gpu -t 120 -c 10 -G 1 -q interactive -A account_number
+module load pytorch/1.8.0-gpu 
+python train.py
+
+#the default training data uses only a small subset of the dataset (a few time events of the whole weather observation).
+#To use a larger subset, increase time_events variable in train.py
