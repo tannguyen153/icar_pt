@@ -25,38 +25,29 @@ class ICARNet(pl.LightningModule):
         import pandas as pd
         import numpy as np
         import netCDF4 as nc
+        inputData= './data/training_input.nc'
+        outputData= './data/training_output.nc'
 
-        fn= './data/example.nc'
-        ds = nc.Dataset(fn)
-        time_events= 4
-
+        ds = nc.Dataset(inputData)
         latitudes = ds.variables['lat'][:]
         longitudes = ds.variables['lon'][:]
-        times = ds.variables['time'][0:time_events]
-        times_grid, latitudes_grid, longtitudes_grid = [
-            x.flatten() for x in np.meshgrid(times, latitudes, longitudes, indexing='ij')]
-        df0 = pd.DataFrame({
-            'time': times_grid,
-            'latitude': latitudes_grid,
-            'longitude': longtitudes_grid
-        })
-        
-        precip_grid= np.zeros(len(times)* len(latitudes) * len(longitudes), dtype=np.double)
-        for k in range(len(times)):
-            if k==time_events: break
-            koff= k*len(longitudes)*len(latitudes)
-            print("Extracting data at time: ", times[k])
-            for j in range(len(latitudes)):
-                joff= koff+j*len(longitudes)
-                for i in range(len(longitudes)):
-                    kji= joff+i
-                    if np.ma.is_masked(ds.variables['precip'][k,j,i])==False:
-                        precip_grid[kji]= ds.variables['precip'][k,j,i]
-                    else: precip_grid[kji]= 20
-        df1 = pd.DataFrame({'precip': precip_grid})
+        times = ds.variables['time'][:]
+        qr = ds.variables['qr']
 
-        df = pd.concat([df0, df1], join = 'outer', axis=1)
-        df.to_csv("inputs_time_lat_lon_output_precip.csv", index=False)        
+        ds_o = nc.Dataset(outputData)
+        latitudes_o = ds_o.variables['lat'][:]
+        longitudes_o = ds_o.variables['lon'][:]
+        times_o = ds_o.variables['time'][:]
+        qr_o = ds_o.variables['qr']
+        df = pd.DataFrame(columns=['time', 'level', 'latitude', 'longitude', 'input', 'output'])
+        for k in range(13, 14,1):#len(times),1):
+            print("Reading data at time", times[k])
+            for l in range(15): #(len(levels)):
+                for j in range(len(latitudes)):
+                    for i in range(len(longitudes)):
+                        if(ds.variables['qr'][k,l,j,i] != 0.0 or ds_o.variables['qr'][k,l,j,i] != 0.0):
+                            new_row = np.array([times[k], l, latitudes[j,i], longitudes[j,i], ds.variables['qr'][k,l,j,i], ds_o.variables['qr'][k,l,j,i]])
+                            df.loc[len(df)]= new_row
 
         folds = KFold(
             n_splits= mparams.n_splits,
@@ -66,6 +57,8 @@ class ICARNet(pl.LightningModule):
         train_idx, val_idx = list(folds.split(df))[mparams.fold]
         self.train_dataset = mapDataset(df.iloc[train_idx])
         self.val_dataset = mapDataset(df.iloc[val_idx])
+        print("Traning size", len(train_idx))
+        print("Validating size", len(val_idx))
 
     def on_train_start(self) -> None:        
         super(ICARNet, self).on_train_start()
@@ -104,7 +97,7 @@ class ICARNet(pl.LightningModule):
             y_pred = self.forward(batch)
         else:
             y_pred = model(batch)
-        y_true = batch['precip'].to(torch.float32)
+        y_true = batch['output'].to(torch.float32)
         mse= mse_loss(y_pred, y_true)
         size = len(y_true)
         return {
@@ -172,7 +165,7 @@ def train(tparams: TrainerParams, mparams: ModuleParams):
     seed_everything(mparams.seed)
     trainer = pl.Trainer(
         max_epochs=tparams.epochs, 
-        accelerator="gpu", devices=[0] #comment this line if train on the CPUs
+        #accelerator="gpu", devices=[0] #comment this line if train on the CPUs
     )
     net = ICARNet(tparams,mparams) 
     trainer.fit(net)

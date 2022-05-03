@@ -33,16 +33,16 @@ class ResidualLayer(nn.Module):
         return x
 
 class encoding_block(nn.Module):    
-    def __init__(self, input_variables=3, input_size=24, activation=None):
+    def __init__(self, input_variables=5, input_size=1, activation=None):
         super(encoding_block, self).__init__()
         self.embedding = nn.Embedding(input_variables, input_size, padding_idx=0)
         self.dense = Dense(input_size * input_variables, input_size, activation=activation)
     def forward(self, inputs):
-        time, lat, lon = inputs
+        time, level, lat, lon, qr = inputs
         time = torch.nn.functional.normalize(time, dim=0)
         lat= torch.nn.functional.normalize(lat, dim=0)
         lon= torch.nn.functional.normalize(lon, dim=0)
-        x = torch.cat((time, lat, lon))
+        x = torch.cat((time, level, lat, lon, qr))
         x = self.dense(x)
         return x
 
@@ -76,8 +76,8 @@ class comp_block(nn.Module):
 class ICARModel(nn.Module):
     def __init__(
         self,
-        input_variables=3,
-        inputSize=24,
+        input_variables=5,
+        inputSize=1,
         num_blocks=1,
         num_before_skip=1,
         num_after_skip=1,
@@ -92,7 +92,7 @@ class ICARModel(nn.Module):
         )
         self.comp_blocks = nn.ModuleList([
             comp_block(
-                inputSize=24,
+                inputSize=1,
                 num_before_skip=num_before_skip,
                 num_after_skip=num_after_skip,
                 activation=activation,
@@ -103,9 +103,11 @@ class ICARModel(nn.Module):
     def forward(self, inputs):
         x= inputs
         time= inputs['time']
+        level= inputs['level']
         lat=  inputs['latitude']
         lon=  inputs['longitude']
-        x= self.encoding_block([time.to(torch.float32), lat.to(torch.float32), lon.to(torch.float32)])
+        inputData= inputs['input']
+        x= self.encoding_block([time.to(torch.float32), level.to(torch.float32), lat.to(torch.float32), lon.to(torch.float32), inputData.to(torch.float32)])
         for i in range(self.num_blocks):
             x = self.comp_blocks[i](x)
         return x
@@ -133,9 +135,9 @@ if __name__ == '__main__':
     dataset = mapDataset(df)
     inputs= DataLoader(
         dataset,
-        batch_size=24,
+        batch_size=1,
         shuffle=False,
-        num_workers=8,
+        num_workers=1,
         pin_memory=True,
     )
 
@@ -144,6 +146,6 @@ if __name__ == '__main__':
     )
 
     for batch in inputs:
-        input1=batch['latitude'].to(torch.float32)
+        input1=batch['input'].to(torch.float32)
         output = m(input1)# torch.from_numpy(batch['level'].numpy().astype(np.float32)))
         break #just a test, early exit

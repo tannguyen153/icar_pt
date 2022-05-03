@@ -8,7 +8,7 @@ class TrainerParams():
 class ModuleParams():
     lr: float = 1e-4
     weight_decay: float = 1e-4
-    batch_size: int = 24
+    batch_size: int = 1
     optim: str = 'adam'
     #used to split the dataset into training and validation sets
     fold: int = 0
