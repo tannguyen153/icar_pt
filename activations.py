@@ -1,3 +1,5 @@
+def ReLU(x, inplace: bool = False):
+    return max(0, x)
 
 def swish(x, inplace: bool = False):
     return x.mul_(x.sigmoid()) if inplace else x.mul(x.sigmoid())

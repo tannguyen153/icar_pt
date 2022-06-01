@@ -33,16 +33,24 @@ class ResidualLayer(nn.Module):
         return x
 
 class encoding_block(nn.Module):    
-    def __init__(self, input_variables=5, input_size=1, activation=None):
+    def __init__(self, input_variables, inputSize, activation=None):
         super(encoding_block, self).__init__()
-        self.embedding = nn.Embedding(input_variables, input_size, padding_idx=0)
-        self.dense = Dense(input_size * input_variables, input_size, activation=activation)
+        self.embedding = nn.Embedding(input_variables, inputSize, padding_idx=0)
+        self.dense = Dense(inputSize * input_variables, inputSize, activation=activation)
     def forward(self, inputs):
-        time, level, lat, lon, qr = inputs
-        time = torch.nn.functional.normalize(time, dim=0)
-        lat= torch.nn.functional.normalize(lat, dim=0)
-        lon= torch.nn.functional.normalize(lon, dim=0)
-        x = torch.cat((time, level, lat, lon, qr))
+        qv, qr, qc, qi, ni, nr, qs, qg, temp, press = inputs
+        #time = torch.nn.functional.normalize(time, dim=0)
+        qv= torch.nn.functional.normalize(qv, dim=0)
+        qr= torch.nn.functional.normalize(qr, dim=0)
+        qc= torch.nn.functional.normalize(qc, dim=0)
+        qi= torch.nn.functional.normalize(qi, dim=0)
+        ni= torch.nn.functional.normalize(ni, dim=0)
+        nr= torch.nn.functional.normalize(nr, dim=0)
+        qs= torch.nn.functional.normalize(qs, dim=0)
+        qg= torch.nn.functional.normalize(qg, dim=0)
+        temp= torch.nn.functional.normalize(temp, dim=0)
+        press= torch.nn.functional.normalize(press, dim=0)
+        x = torch.cat((qv, qr, qc, qi, ni, nr, qs, qg, temp, press))
         x = self.dense(x)
         return x
 
@@ -76,38 +84,41 @@ class comp_block(nn.Module):
 class ICARModel(nn.Module):
     def __init__(
         self,
-        input_variables=5,
-        inputSize=1,
-        num_blocks=1,
+        mparams,
         num_before_skip=1,
         num_after_skip=1,
         activation=swish
     ):
         super(ICARModel, self).__init__()
-        self.num_blocks = num_blocks
+        self.num_blocks = mparams.num_blocks
         self.encoding_block = encoding_block(
-            input_variables,
-            inputSize,            
+            input_variables=mparams.input_variables,
+            inputSize=mparams.batch_size,            
             activation=activation,
         )
         self.comp_blocks = nn.ModuleList([
             comp_block(
-                inputSize=1,
-                num_before_skip=num_before_skip,
-                num_after_skip=num_after_skip,
+                inputSize=mparams.batch_size,
+                num_before_skip=mparams.num_before_skip,
+                num_after_skip=mparams.num_after_skip,
                 activation=activation,
             )
-            for _ in range(num_blocks)
+            for _ in range(self.num_blocks)
         ])
 
     def forward(self, inputs):
         x= inputs
-        time= inputs['time']
-        level= inputs['level']
-        lat=  inputs['latitude']
-        lon=  inputs['longitude']
-        inputData= inputs['input']
-        x= self.encoding_block([time.to(torch.float32), level.to(torch.float32), lat.to(torch.float32), lon.to(torch.float32), inputData.to(torch.float32)])
+        qv = inputs['qv']
+        qr = inputs['qr']
+        qc = inputs['qc']
+        qi = inputs['qi']
+        ni = inputs['ni']
+        nr = inputs['nr']
+        qs = inputs['qs']
+        qg = inputs['qg']
+        temp = inputs['temp']
+        press = inputs['press']
+        x= self.encoding_block([qv.to(torch.float32), qr.to(torch.float32), qc.to(torch.float32), qi.to(torch.float32), ni.to(torch.float32), nr.to(torch.float32), qs.to(torch.float32), qg.to(torch.float32), temp.to(torch.float32), press.to(torch.float32)])
         for i in range(self.num_blocks):
             x = self.comp_blocks[i](x)
         return x

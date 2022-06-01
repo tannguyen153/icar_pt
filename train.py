@@ -13,48 +13,69 @@ from typing import Callable, List, Dict, Optional
 from model import ICARModel
 from params import ModuleParams, TrainerParams 
 import netCDF4 as nc
+import pandas as pd
+import numpy as np
 from loss import Metrics, mse_loss
 
 class ICARNet(pl.LightningModule):
     def __init__(self,tparams: TrainerParams, mparams: ModuleParams):
         super().__init__()        
-        self.model = ICARModel(num_blocks=1)        
+        self.model = ICARModel(mparams)        
         self.best: float = float('inf')        
 
     def setup(self, stage: str):
-        import pandas as pd
-        import numpy as np
-        import netCDF4 as nc
         inputData= './data/training_input.nc'
         outputData= './data/training_output.nc'
 
         ds = nc.Dataset(inputData)
-        latitudes = ds.variables['lat'][:]
-        longitudes = ds.variables['lon'][:]
-        times = ds.variables['time'][:]
-        qr = ds.variables['qr']
+        qv = ds.variables['qv'][:,:,:,:]
+        qr = ds.variables['qr'][:,:,:,:]
+        qc = ds.variables['qc'][:,:,:,:]
+        qi = ds.variables['qi'][:,:,:,:]
+        ni = ds.variables['ni'][:,:,:,:]
+        nr = ds.variables['nr'][:,:,:,:]
+        qs = ds.variables['qs'][:,:,:,:]
+        qg = ds.variables['qg'][:,:,:,:]
+        temp = ds.variables['temperature'][:,:,:,:]
+        press = ds.variables['pressure'][:,:,:,:]
 
         ds_o = nc.Dataset(outputData)
-        latitudes_o = ds_o.variables['lat'][:]
-        longitudes_o = ds_o.variables['lon'][:]
-        times_o = ds_o.variables['time'][:]
-        qr_o = ds_o.variables['qr']
-        df = pd.DataFrame(columns=['time', 'level', 'latitude', 'longitude', 'input', 'output'])
-        for k in range(13, 14,1):#len(times),1):
-            print("Reading data at time", times[k])
-            for l in range(15): #(len(levels)):
-                for j in range(len(latitudes)):
-                    for i in range(len(longitudes)):
-                        if(ds.variables['qr'][k,l,j,i] != 0.0 or ds_o.variables['qr'][k,l,j,i] != 0.0):
-                            new_row = np.array([times[k], l, latitudes[j,i], longitudes[j,i], ds.variables['qr'][k,l,j,i], ds_o.variables['qr'][k,l,j,i]])
-                            df.loc[len(df)]= new_row
+        qr_o = ds_o.variables['qr'][:,:,:,:]
+        qr_sum= qr_o+qr #sum of positive values is zero only if both operands are zero
+        num_rows=np.count_nonzero(qr_sum)
+        nz_idx= np.nonzero(qr_sum) 
+        qv= qv[nz_idx]
+        qr= qr[nz_idx]
+        qc= qc[nz_idx]
+        qi= qi[nz_idx]
+        ni= ni[nz_idx]
+        nr= nr[nz_idx]
+        qs= qs[nz_idx]
+        qg= qg[nz_idx]
+        temp= temp[nz_idx]
+        press= press[nz_idx]
+        qr_o= qr_o[nz_idx]
 
+        columnList=['qv', 'qr', 'qc', 'qi', 'ni', 'nr', 'qs', 'qg', 'temp', 'press', 'output']
+        npArray = np.zeros(shape=(num_rows,len(columnList)))
+        mergedArray= np.column_stack((qv, qr, qc, qi, ni, nr, qs, qg, temp, press, qr_o))
+        #down sample the dataset by the given factor
+        mask = np.random.choice([False, True], len(mergedArray), p=[1-1/mparams.down_sampling_factor, 1/mparams.down_sampling_factor])
+        mergedArray=mergedArray[mask]
+        #discard some samples so that the number of samples is divisible to the batch size
+        datasetSize= len(mergedArray)- len(mergedArray)%mparams.batch_size
+        mergedArray=mergedArray[0:datasetSize]
+        #create a dataframe based on the dataset
+        df = pd.DataFrame(mergedArray, columns=columnList)
+        #split the dataset to training and validation sets
         folds = KFold(
             n_splits= mparams.n_splits,
             random_state= mparams.seed,
             shuffle=True,
         )
         train_idx, val_idx = list(folds.split(df))[mparams.fold]
+        train_idx= train_idx[0:len(train_idx)-len(train_idx)%(mparams.batch_size*tparams.ngpus)]
+        val_idx  = val_idx  [0:len(val_idx)-len(val_idx)%(mparams.batch_size*tparams.ngpus)]
         self.train_dataset = mapDataset(df.iloc[train_idx])
         self.val_dataset = mapDataset(df.iloc[val_idx])
         print("Traning size", len(train_idx))
@@ -97,7 +118,7 @@ class ICARNet(pl.LightningModule):
             y_pred = self.forward(batch)
         else:
             y_pred = model(batch)
-        y_true = batch['output'].to(torch.float32)
+        y_true = (batch['output']-batch['qr']).to(torch.float32)
         mse= mse_loss(y_pred, y_true)
         size = len(y_true)
         return {
@@ -166,6 +187,7 @@ def train(tparams: TrainerParams, mparams: ModuleParams):
     trainer = pl.Trainer(
         max_epochs=tparams.epochs, 
         #accelerator="gpu", devices=[0] #comment this line if train on the CPUs
+        accelerator="ddp", gpus=tparams.ngpus #comment this line if train on the CPUs
     )
     net = ICARNet(tparams,mparams) 
     trainer.fit(net)
