@@ -1,3 +1,4 @@
+module load cgpu
 salloc -C gpu -t 120 -c 20 -G 2 -q interactive -A account_number
 module load pytorch/1.8.0-gpu 
 python train.py

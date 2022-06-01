@@ -2,7 +2,7 @@ from typing import Optional, List
 
 class TrainerParams():
     ngpus: int =2
-    epochs: int = 16
+    epochs: int = 8
     num_workers: int=10
 
 class ModuleParams():
