@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import pytorch_lightning as pl
+from activations import swish
 from pytorch_lightning import seed_everything
 from pytorch_lightning.callbacks.early_stopping import EarlyStopping
 from torch.optim.optimizer import Optimizer
@@ -16,11 +17,13 @@ import netCDF4 as nc
 import pandas as pd
 import numpy as np
 from loss import Metrics, mse_loss
+import sys
+
 
 class ICARNet(pl.LightningModule):
     def __init__(self,tparams: TrainerParams, mparams: ModuleParams):
         super().__init__()        
-        self.model = ICARModel(mparams)        
+        self.model = ICARModel(mparams, activation=swish)        
         self.best: float = float('inf')        
 
     def setup(self, stage: str):
@@ -187,9 +190,14 @@ def train(tparams: TrainerParams, mparams: ModuleParams):
     trainer = pl.Trainer(
         max_epochs=tparams.epochs, 
         #accelerator="gpu", devices=[0] #comment this line if train on the CPUs
-        accelerator="ddp", gpus=tparams.ngpus #comment this line if train on the CPUs
+        #accelerator="ddp", gpus=tparams.ngpus #comment this line if train on the CPUs
     )
-    net = ICARNet(tparams,mparams) 
+    net = ICARNet(tparams, mparams) 
+    #if mparams.printout:
+    #    with open('networkArch', 'w') as f:
+    #        with np.printoptions(threshold=np.inf):
+    #            sys.stdout = f
+    #            print(net)
     trainer.fit(net)
 
 
