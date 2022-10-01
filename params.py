@@ -16,12 +16,14 @@ class ModuleParams():
     num_after_skip: int=0
     optim: str = 'adam'
     down_sampling_factor: int = 32
+    state_var: str ='qg'
     #used to split the dataset into training and validation sets
     fold: int = 0
     n_splits: Optional[int] = 4
     seed: int = 0
-    #print network structure
-    printout: int = 1
+    #print latest value of leanable parameters
+    readout_freq: int = 131072 
+    activation: str = 'relu'
 
 if __name__ == '__main__':
     #just a test

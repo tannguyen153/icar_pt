@@ -1,5 +1,7 @@
-def ReLU(x, inplace: bool = False):
-    return max(0, x)
+import torch.nn as nn
+
+def ReLU(x):
+    return nn.functional.relu(x,inplace=True)
 
 def swish(x, inplace: bool = False):
     return x.mul_(x.sigmoid()) if inplace else x.mul(x.sigmoid())

@@ -23,7 +23,7 @@ import sys
 class ICARNet(pl.LightningModule):
     def __init__(self,tparams: TrainerParams, mparams: ModuleParams):
         super().__init__()        
-        self.model = ICARModel(mparams, activation=swish)        
+        self.model = ICARModel(mparams)        
         self.best: float = float('inf')        
 
     def setup(self, stage: str):
