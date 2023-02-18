@@ -25,8 +25,8 @@ class ModuleParams():
     readout_freq: int = 1310720
     #activation: str = 'sigmoid'
     activation: str = 'swish'
-    train_input: str = 'data/tiny_input.nc'
-    train_output: str = 'data/tiny_output.nc'
+    train_input: str = 'data/demo_input.nc'
+    train_output: str = 'data/demo_output.nc'
 
 if __name__ == '__main__':
     #just a test
