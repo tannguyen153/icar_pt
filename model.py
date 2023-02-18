@@ -3,7 +3,7 @@ import torch.nn as nn
 import numpy as np
 from torch.nn.init import xavier_uniform_
 from torch.nn.init import constant_
-from activations import swish
+from activations import sigmoid,swish
 from activations import ReLU
 from loader import mapDataset, myIterableDataset, DataLoader
 import sys
@@ -34,6 +34,7 @@ class Dense(nn.Linear):
                 print("\n")
                 print(np.transpose(self.bias.detach().numpy()))
                 print("\n \n")
+                sys.stdout = sys.__stdout__
 
     def forward(self, inputs):
         y = super(Dense, self).forward(inputs)
@@ -41,9 +42,11 @@ class Dense(nn.Linear):
             y = ReLU(y)
         elif(self.activation == 'swish'): 
             y = swish(y, inplace=True)
+        elif(self.activation == 'sigmoid'):
+            y = sigmoid(y, inplace=True)
+        self.iter = self.iter+1
         if self.iter % self.readout_freq ==0: 
             self.printWnB()
-        self.iter = self.iter+1
         return y
 
 class ResidualLayer(nn.Module):
@@ -65,56 +68,41 @@ class encoding_block(nn.Module):
 
     def forward(self, inputs):
         qv, qr, qc, qi, ni, nr, qs, qg, temp, press = inputs
-        qv= torch.nn.functional.normalize(qv, dim=0)
-        qr= torch.nn.functional.normalize(qr, dim=0)
-        qc= torch.nn.functional.normalize(qc, dim=0)
-        qi= torch.nn.functional.normalize(qi, dim=0)
-        ni= torch.nn.functional.normalize(ni, dim=0)
-        nr= torch.nn.functional.normalize(nr, dim=0)
-        qs= torch.nn.functional.normalize(qs, dim=0)
-        qg= torch.nn.functional.normalize(qg, dim=0)
-        temp= torch.nn.functional.normalize(temp, dim=0)
-        press= torch.nn.functional.normalize(press, dim=0)
+        #qv= torch.nn.functional.normalize(qv, dim=0)
+        #qr= torch.nn.functional.normalize(qr, dim=0)
+        #qc= torch.nn.functional.normalize(qc, dim=0)
+        #qi= torch.nn.functional.normalize(qi, dim=0)
+        #ni= torch.nn.functional.normalize(ni, dim=0)
+        #nr= torch.nn.functional.normalize(nr, dim=0)
+        #qs= torch.nn.functional.normalize(qs, dim=0)
+        #qg= torch.nn.functional.normalize(qg, dim=0)
+        #temp= torch.nn.functional.normalize(temp, dim=0)
+        #press= torch.nn.functional.normalize(press, dim=0)
         x = torch.cat((qv, qr, qc, qi, ni, nr, qs, qg, temp, press))
         x= x.detach().numpy()
         x= np.reshape(x, (self.input_variables, self.input_batch_size))
         x= np.transpose(x)
-        x = self.dense(torch.tensor(x))
+        x= self.dense(torch.tensor(x))
         return x
 
 class comp_block(nn.Module):
-    def __init__(self, input_batch_size, kernel_size, num_before_skip, num_after_skip, activation="", state_var="", readout_freq=1):
+    def __init__(self, input_batch_size, kernel_size, activation="", state_var="", readout_freq=1):
         super(comp_block, self).__init__()
         self.input_batch_size = input_batch_size
         self.kernel_size = kernel_size
         self.activation= activation
-
-        self.layers_before_skip = nn.ModuleList([
-            ResidualLayer(kernel_size, activation=activation, bias=True, state_var=state_var, readout_freq=readout_freq)
-            for _ in range(num_before_skip)
-        ])
-
-        self.final_before_skip = Dense(kernel_size, kernel_size, activation=activation, bias=True, state_var=state_var, readout_freq=readout_freq)        
-
-        self.layers_after_skip = nn.ModuleList([
-            ResidualLayer(kernel_size, activation=activation, bias=True, state_var=state_var, readout_freq=readout_freq)
-            for _ in range(num_after_skip)
-        ])
+        self.dense = Dense(kernel_size, kernel_size, activation=activation, bias=True, state_var=state_var, readout_freq=readout_freq)        
 
     def forward(self, inputs):
         x = inputs
-        #for layer in self.layers_before_skip:
-        #    x = layer(x)
-        x = self.final_before_skip(x)
+        x = self.dense(x)
         x = inputs + x
-        #for layer in self.layers_after_skip:
-        #    x = layer(x)
         return x
 
 class output_block(nn.Module):
-    def __init__(self, input_batch_size, kernel_size, activation="", state_var="", readout_freq=1):
+    def __init__(self, input_batch_size, kernel_size, num_output=1, activation="", state_var="", readout_freq=1):
         super(output_block, self).__init__()
-        self.dense = Dense(kernel_size, 1, activation=activation, state_var=state_var, readout_freq=readout_freq)
+        self.dense = Dense(kernel_size, num_output, activation=activation, state_var=state_var, readout_freq=readout_freq)
         self.activation= activation
     def forward(self, inputs):
         return self.dense(inputs)
@@ -141,8 +129,6 @@ class ICARModel(nn.Module):
             comp_block(
                 input_batch_size=mparams.batch_size,
                 kernel_size=mparams.kernel_size,
-                num_before_skip=mparams.num_before_skip,
-                num_after_skip=mparams.num_after_skip,
                 activation=self.activation,
                 state_var= mparams.state_var,
                 readout_freq= mparams.readout_freq
@@ -152,6 +138,7 @@ class ICARModel(nn.Module):
         self.output_block = output_block(
             input_batch_size=mparams.batch_size,
             kernel_size=mparams.kernel_size,
+            num_output=mparams.n_outputs,
             activation=self.activation,
             state_var= mparams.state_var,
             readout_freq= mparams.readout_freq
