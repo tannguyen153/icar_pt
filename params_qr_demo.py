@@ -9,7 +9,7 @@ class TrainerParams():
 class ModuleParams():
     lr: float = 1e-4
     weight_decay: float = 1e-4
-    batch_size: int = 32
+    batch_size: int = 1
     input_variables: int = 10  #state variables
     kernel_size: int = 64
     num_blocks: int=8 #num compute blocks
